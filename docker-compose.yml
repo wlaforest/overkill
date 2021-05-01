@@ -2,7 +2,6 @@ version: '3.9'
 
 services:
     dremio:
-        restart: always
         image: dremio/dremio-oss
         hostname: dremio
         ports:
@@ -10,6 +9,10 @@ services:
             - "31010:31010" # ODBC/JDBC clients
             - "2181:2181"   # ZooKeeper
             - "45678:45678" # Inter-node communication
+        networks:
+          - elastic
+          - dremio 
+          - postgres
 
     postgres:
         image: postgres:10.5
@@ -29,3 +32,50 @@ services:
           - ./postgres/sql/create_tables.sql:/docker-entrypoint-initdb.d/create_tables.sql
           # copy the sql script to fill tables
           - ./postgres/sql/fill_tables.sql:/docker-entrypoint-initdb.d/fill_tables.sql
+        networks:
+          - postgres
+
+    es01:
+        image: docker.elastic.co/elasticsearch/elasticsearch:7.12.1
+        hostname: es01
+        container_name: es01
+        environment:
+          - node.name=es01
+          - cluster.name=es-docker-cluster
+          - cluster.initial_master_nodes=es01
+          - bootstrap.memory_lock=true
+          - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+        ulimits:
+          memlock:
+            soft: -1
+            hard: -1
+        volumes:
+          - data01:/usr/share/elasticsearch/data
+        ports:
+          - 9200:9200
+        networks:
+          - elastic
+
+    kib01:
+        image: docker.elastic.co/kibana/kibana:7.12.1
+        hostname: kib01
+        container_name: kib01
+        ports:
+          - 5601:5601
+        environment:
+          ELASTICSEARCH_URL: http://es01:9200
+          ELASTICSEARCH_HOSTS: '["http://es01:9200"]'
+        networks:
+          - elastic
+
+volumes:
+  data01:
+    driver: local
+
+networks:
+  elastic:
+    driver: bridge
+  postgres:
+    driver: bridge
+  dremio:
+    driver: bridge
